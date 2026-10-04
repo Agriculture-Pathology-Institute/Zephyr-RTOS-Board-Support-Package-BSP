@@ -1,0 +1,19 @@
+# File Path: zephyr/module.yml
+# =========================================================================
+# REVOLUTIONARY TECHNOLOGY COMPANY — UNIVAC IX SYSTEMS GROUP
+# Zephyr RTOS Out-of-Tree Hardware Module Registration Descriptor
+# Enforces absolute architectural conformity for custom 16-state logic platforms
+# =========================================================================
+
+name: rt_hex_board_zephyr_bsp
+version: "1.10.0"
+
+build:
+  # Instructs the CMake and West build systems to automatically append this 
+  # repository's board directory to the global out-of-tree scanning paths
+  settings:
+    board_root: .
+
+  # Integrates custom driver DTS bindings if additional 16-state analog 
+  # window comparators are added to the board layout in the future
+  kconfig: boards/arm/rt_hex_board/Kconfig.defconfig
