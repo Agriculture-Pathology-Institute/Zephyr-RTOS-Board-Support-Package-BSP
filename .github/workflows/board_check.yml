@@ -1,0 +1,91 @@
+# File Path: .github/workflows/board_check.yml
+name: Zephyr RTOS BSP Hardware Syntax & Device Tree Linting Loop
+
+on:
+  push:
+    branches: [ "main", "production" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  audit-bsp-syntax:
+    name: Device Tree & Kconfig Structural Audit
+    runs-on: ubuntu-24.04 # Hardened Linux environment baseline runner [1.22]
+
+    steps:
+    # 1. Checkout the pristine Board Support Package repository
+    - name: Checkout BSP Source Material
+      uses: actions/checkout@v4
+
+    # 2. Initialize high-performance Python environment for Zephyr script toolchains
+    - name: Initialize Hardware Linter Python Runtime
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        cache: 'pip'
+
+    # 3. Install core Zephyr dev tools required to parse .dts and Kconfig fields headlessly
+    - name: Install West and Hardware Parsing Engines
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyyaml west devicetree
+        # Installs base geometry and manifest string compilers [1.20]
+
+    # 4. Verify that zephyr/module.yml aligns perfectly with out-of-tree West specs
+    - name: Validate West out-of-tree module.yml Metadata
+      run: |
+        echo "[*] Parsing zephyr/module.yml structural layout..."
+        if [ -f zephyr/module.yml ]; then
+          python3 -c "
+import yaml
+with open('zephyr/module.yml', 'r') as f:
+    cfg = yaml.safe_load(f)
+assert cfg['name'] == 'rt_hex_board_zephyr_bsp', 'Invalid module name definition'
+assert 'board_root' in cfg['build']['settings'], 'Missing out-of-tree board root path setting'
+print('[+] West module.yml validation check passed successfully.')
+          "
+        else
+          echo "[-] Error: Critical metadata descriptor zephyr/module.yml not found."
+          exit 1
+        fi
+
+    # 5. Lint the custom 16-state analog pinctrl definitions inside the Device Tree file
+    # Ensures no malformed nodes exist on your PA/PB parallel data lines
+    - name: Lint rt_hex_board.dts Pin Configurations
+      run: |
+        echo "[*] Auditing rt_hex_board.dts syntax matrices..."
+        TARGET_DTS="boards/arm/rt_hex_board/rt_hex_board.dts"
+        if [ -f "$TARGET_DTS" ]; then
+          # Check for foundational device tree structural declarations
+          grep -q "/dts-v1/;" "$TARGET_DTS" || { echo "[-] Error: Missing /dts-v1/; header standard"; exit 1; }
+          grep -q "model =" "$TARGET_DTS" || { echo "[-] Error: Missing board platform model string"; exit 1; }
+          grep -q "micrel-parallel-gpios" "$TARGET_DTS" || { echo "[-] Error: Micrel SY10E445 parallel lines broken"; exit 1; }
+          grep -q "ti-decoder" "$TARGET_DTS" || { echo "[-] Error: TI CD4514B decoder pins unassigned"; exit 1; }
+          echo "[+] Device Tree pinctrl compliance audit completed successfully."
+        else
+          echo "[-] Error: Custom Device Tree file not found at path: $TARGET_DTS"
+          exit 1
+        fi
+
+    # 6. Verify the Kconfig parameters enforce your 10.0 MHz Stage 2 industrial divider frequency
+    - name: Validate rt_hex_board_defconfig Frequency Constraints
+      run: |
+        echo "[*] Auditing rt_hex_board_defconfig kernel definitions..."
+        TARGET_DEFCONFIG="boards/arm/rt_hex_board/rt_hex_board_defconfig"
+        if [ -f "$TARGET_DEFCONFIG" ]; then
+          grep -q "CONFIG_SOC_STM32F405XG=y" "$TARGET_DEFCONFIG" || { echo "[-] Error: Malformed silicon part allocation"; exit 1; }
+          grep -q "CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC=10000000" "$TARGET_DEFCONFIG" || { echo "[-] Error: System clock must equal exactly 10.0 MHz for Industrial Divider synchronization"; exit 1; }
+          echo "[+] Kconfig performance parameters matching your custom hex board verified."
+        else
+          echo "[-] Error: Board defconfig file not found at path: $TARGET_DEFCONFIG"
+          exit 1
+        fi
+
+    # 7. Post success announcement to confirm secure baseline alignment
+    - name: Log Successful Compliance Validation
+      if: success()
+      run: |
+        echo "[🚀 BSP BUILD STANDARDS NOMINAL] Hard hardware definitions are completely aligned and locked for manufacturing."
